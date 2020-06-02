@@ -124,9 +124,7 @@ Input_Operation()
 		Check_Installer_Version
 		Check_Installer_Support
 		Installer_Variables
-		Input_Volume
-		Create_Installer
-		Patch_Installer
+		Input_Type
 	fi
 	if [[ $operation == "2" ]]; then
 		Input_Package
@@ -157,14 +155,29 @@ Check_Installer_Stucture()
 
 Check_Installer_Version()
 {
-	echo -e $(date "+%b %m %H:%M:%S") ${text_progress}"> Checking installer version."${erase_style}	
+	echo -e $(date "+%b %m %H:%M:%S") ${text_progress}"> Checking installer version."${erase_style}
 	installer_version="$(defaults read /tmp/Base\ System/System/Library/CoreServices/SystemVersion.plist ProductVersion)"
 	installer_version_short="$(defaults read /tmp/Base\ System/System/Library/CoreServices/SystemVersion.plist ProductVersion | cut -c-5)"
-
 	if [[ ${#installer_version} == "6" ]]; then
 		installer_version_short="$(defaults read /tmp/Base\ System/System/Library/CoreServices/SystemVersion.plist ProductVersion | cut -c-4)"
 	fi
-	echo -e $(date "+%b %m %H:%M:%S") ${move_up}${erase_line}${text_success}"+ Checked installer version."${erase_style}	
+	if [[ $installer_version_short == "10.8" ]]; then
+		installer_title="OS X Mountain Lion"
+		#statements
+	fi
+	if [[ $installer_version_short == "10.9" ]]; then
+		installer_title="OS X Mavericks"
+		#statements
+	fi
+	if [[ $installer_version_short == "10.10" ]]; then
+		installer_title="OS X Yosemite"
+		#statements
+	fi
+	if [[ $installer_version_short == "10.11" ]]; then
+		installer_title="OS X El Capitan"
+		#statements
+	fi
+	echo -e $(date "+%b %m %H:%M:%S") ${move_up}${erase_line}${text_success}"+ Checked installer version."${erase_style}
 }
 
 Check_Installer_Support()
@@ -178,6 +191,8 @@ Check_Installer_Support()
 		Input_On
 		exit
 	fi
+	echo -e $(date "+%b %m %H:%M:%S") ${text_message}"+ Version is $installer_title."${erase_style}
+
 }
 
 Installer_Variables()
@@ -186,12 +201,58 @@ Installer_Variables()
 		installer_prelinkedkernel="$installer_version_short"
 	fi
 }
+Input_Type()
+{
+	echo -e $(date "+%b %m %H:%M:%S") ${text_message}"/ Would you prefer to install to a disk or ISO file?"${erase_style}
+	echo -e $(date "+%b %m %H:%M:%S") ${text_message}"/ Input an operation number."${erase_style}
+	echo -e $(date "+%b %m %H:%M:%S") ${text_message}"/     1 - Disk"${erase_style}
+	echo -e $(date "+%b %m %H:%M:%S") ${text_message}"/     2 - ISO File"${erase_style}
+	Input_On
+	read -e -p "$(date "+%b %m %H:%M:%S") / " type
+	Input_Off
 
+	if [[ $type == "1" ]]; then
+		Input_Volume
+		Create_Installer
+		Patch_Installer
+		#statements
+	fi
+	if [[ $type == "2" ]]; then
+		Where_ISO
+		Create_ISO
+		Create_Installer
+		Patch_Installer
+		Finish_ISO
+		#statements
+	fi
+}
+Where_ISO()
+{
+	echo -e $(date "+%b %m %H:%M:%S") ${text_message}"/ Where do you want the ISO file stored?"${erase_style}
+	echo -e $(date "+%b %m %H:%M:%S") ${text_message}"/ Input a directory."${erase_style}
+	Input_On
+	read -e -p "$(date "+%b %m %H:%M:%S") / " iso_dir
+	Input_Off
+}
+Create_ISO()
+{
+	hdiutil detach "/Volumes/patched"
+	rm -R "/Volumes/patched"
+	rm "/tmp/temp.cdr.dmg"
+	rm -R "/tmp/patched.cdr.dmg.sparsebundle"
+	echo -e $(date "+%b %m %H:%M:%S") ${text_message}"/ Generating ISO file..."${erase_style}
+	hdiutil create -o "/tmp/temp.cdr.dmg" -size 8121m -layout SPUD -fs HFS+ -volname "patched" -ov
+	hdiutil convert -format UDRW -o "/tmp/patched.cdr.dmg" "/tmp/temp.cdr.dmg" -ov
+	echo -e $(date "+%b %m %H:%M:%S") ${text_message}"/ Mounting ISO file..."${erase_style}
+	hdiutil attach "/tmp/patched.cdr.dmg" -noverify -nobrowse -mountpoint "/Volumes/Install $installer_title Patched"
+	installer_volume_path="/Volumes/Install $installer_title Patched"
+	installer_volume_name="Install $installer_title Patched"
+}
 Input_Volume()
 {
 	echo -e $(date "+%b %m %H:%M:%S") ${text_message}"/ What volume would you like to use?"${erase_style}
 	echo -e $(date "+%b %m %H:%M:%S") ${text_message}"/ Input a volume name."${erase_style}
-	for volume_path in /Volumes/*; do 
+	for volume_path in /Volumes/*; do
 		volume_name="${volume_path#/Volumes/}"
 		if [[ ! "$volume_name" == com.apple* ]]; then
 			echo -e $(date "+%b %m %H:%M:%S") ${text_message}"/     ${volume_name}"${erase_style} | sort
@@ -210,6 +271,7 @@ Create_Installer()
 	Output_Off asr restore -source "$installer_images_path"/BaseSystem.dmg -target "$installer_volume_path" -noprompt -noverify -erase
 	echo -e $(date "+%b %m %H:%M:%S") ${move_up}${erase_line}${text_success}"+ Restored installer disk image."${erase_style}
 
+
 	echo -e $(date "+%b %m %H:%M:%S") ${text_progress}"> Renaming installer volume."${erase_style}
 	Output_Off diskutil rename /Volumes/*Base\ System "$installer_volume_name"
 	bless --folder "$installer_volume_path"/System/Library/CoreServices --label "$installer_volume_name"
@@ -223,7 +285,7 @@ Create_Installer()
 	echo -e $(date "+%b %m %H:%M:%S") ${text_progress}"> Copying installer disk images."${erase_style}
 	cp "$installer_images_path"/BaseSystem.dmg "$installer_volume_path"/
 	cp "$installer_images_path"/BaseSystem.chunklist "$installer_volume_path"/
-	
+
 	if [[ -e "$installer_images_path"/AppleDiagnostics.dmg ]]; then
 		cp "$installer_images_path"/AppleDiagnostics.dmg "$installer_volume_path"/
 		cp "$installer_images_path"/AppleDiagnostics.chunklist "$installer_volume_path"/
@@ -369,7 +431,18 @@ Patch_Package()
 	Output_Off rm -R "$package_folder"
 	echo -e $(date "+%b %m %H:%M:%S") ${move_up}${erase_line}${text_success}"+ Removed temporary files."${erase_style}
 }
-
+Finish_ISO()
+{
+	iso_file="$installer_title Patched"
+	echo -e $(date "+%b %m %H:%M:%S") ${text_progress}"> Moving ISO file."${erase_style}
+	hdiutil detach "$installer_volume_path"
+	echo -e $(date "+%b %m %H:%M:%S") ${text_progress}"> Processing final ISO conversion."${erase_style}
+	hdiutil convert "/tmp/patched.cdr.dmg" -format UDTO -o "$iso_dir/$iso_file.iso"
+	mv "$iso_dir/$iso_file.iso.cdr" "$iso_dir/$iso_file.iso"
+	open "$iso_dir"
+	rm "/tmp/patched.cdr.dmg"
+	rm "/tmp/temp.cdr.dmg"
+}
 End()
 {
 	if [[ $operation == "1" ]]; then
